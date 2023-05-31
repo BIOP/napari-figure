@@ -15,9 +15,9 @@ import numpy as np
 import string
 from pathlib import Path
 
-from qtpy.QtWidgets import (QWidget, QPushButton, QListWidget, QDialog, QDoubleSpinBox, QSpinBox,
-QGroupBox, QGridLayout, QHBoxLayout,QVBoxLayout, QLabel, QColorDialog, QLayout,
-QTabWidget, QLineEdit, QCheckBox, QSizePolicy, QFileDialog)
+from qtpy.QtWidgets import (QWidget, QPushButton, QListWidget, QDialog, QSpinBox,
+QGroupBox, QGridLayout, QHBoxLayout,QVBoxLayout, QLabel, 
+QTabWidget, QLineEdit, QCheckBox, QFileDialog , QApplication)
 from qtpy.QtGui import QPixmap, QColor
 from qtpy.QtCore import Qt
 
@@ -110,6 +110,8 @@ class FigureWidget(QWidget):
         self.montage_creator = MontageSettingsSelector(napari_viewer=self.viewer, params= self.params)
         self._montage_layout.addWidget( self.montage_creator )
 
+
+
         self.montage_button = QPushButton('Create Montage')
         self.montage_button.setEnabled(  True )
         self._montage_layout.addWidget(self.montage_button)
@@ -118,6 +120,8 @@ class FigureWidget(QWidget):
         self.montage_button.clicked.connect(self.create_montage_image)
         ##############################################################
 
+        #  Initialize the widget WITH LOADING OF A 6 channels image, for loading biop_colormaps
+        #TODO find a way to add colormaps to napa without loading an image !!!
         self.initialize()
 
     def initialize(self):
@@ -169,7 +173,14 @@ class FigureWidget(QWidget):
                                  cols = self.params.montage_columns
                                 )
         
-        #TODO make sure it works with r and c 
+        #TODO make sure it works with r x c > len(panels)
+        if self.params.montage_rows*self.params.montage_columns != len(panels):
+            if self.params.montage_rows*self.params.montage_columns < len(panels):
+                show_info("you've defined less panels than the number of layers, some layers will be missing")
+            else:
+                show_info("you've defined more panels than the number of layers, some panels will be empty")
+                panels.append( microshow( images=[np.zeros(layers_data[0].shape)] ))
+        
         i=0
         for r in range(self.params.montage_rows):
             for c in range(self.params.montage_columns):
@@ -182,9 +193,26 @@ class FigureWidget(QWidget):
         micropanel.savefig(str(montage_path), bbox_inches = 'tight', pad_inches = 0, dpi=600)
        
         #TODO replace this with a QPixMap
-        montage_image = io.imread(str(montage_path))
-        montage_viewer = napari.Viewer()
-        montage_viewer.add_image(montage_image, name="montage")
+        #montage_image = io.imread(str(montage_path))
+        #montage_viewer = napari.Viewer()
+        #montage_viewer.add_image(montage_image, name="montage")
+        app = QApplication([])
+        label = QLabel()
+
+        # Create a QPixmap object from a local image file
+        pixmap = QPixmap(str( montage_path) )
+        pixmap.width()
+        pixmap.height()
+        # Scale the pixmap to fit within the label
+        scaled_pixmap = pixmap.scaled(label.width(), label.height())
+        # Create a QLabel widget and set the pixmap as its image
+        label.setPixmap(scaled_pixmap)
+        # Show the label
+        label.show()
+        # Run the event loop
+        app.exec_()
+
+
 
     #TODO move this to a separate file
     def MakeMltCmap(self, N, red_lim,g_lim,blue_lim):
@@ -282,6 +310,51 @@ class MontageSettingsSelector(QWidget , Params):
 
         self.viewer = napari_viewer
         self.params = params    
+
+        # Create a VerticalBox layout for the widget
+        self._layout = QVBoxLayout()
+        self.setLayout(self._layout)
+
+        # Create a QGridLayout for the montage settings
+        self.montage_grid = QGridLayout()
+        self._layout.addLayout(self.montage_grid)
+
+        # add the rows and columns spinboxes
+        self.montage_rows_label = QLabel('Rows')
+        self.montage_rows_value = QSpinBox( minimum = 1, maximum = 10 , singleStep = 1, value = 2)
+        self.montage_grid.addWidget(self.montage_rows_label ,  0, 0)
+        self.montage_grid.addWidget(self.montage_rows_value,  0, 1)
+
+        self.montage_columns_label = QLabel('Columns')
+        self.montage_columns_value = QSpinBox( minimum = 1, maximum = 10 , singleStep = 1, value = 2)
+        self.montage_grid.addWidget(self.montage_columns_label ,  1, 0)
+        self.montage_grid.addWidget(self.montage_columns_value,  1, 1)
+
+        #add the spacing spinbox
+        self.montage_spacing_label = QLabel('Spacing')
+        self.montage_spacing_value = QSpinBox( minimum = 0, maximum = 10 , singleStep = 1, value = 3)
+        self.montage_grid.addWidget(self.montage_spacing_label ,  2, 0)
+        self.montage_grid.addWidget(self.montage_spacing_value,  2, 1)
+        
+
+        
+        # create connect when text is changed
+        self.montage_rows_value.valueChanged.connect(self.update_montage_rows)
+        self.montage_columns_value.valueChanged.connect(self.update_montage_columns)
+        self.montage_spacing_value.valueChanged.connect(self.update_montage_spacing)
+
+
+
+    def update_montage_rows(self):
+        self.params.montage_rows = self.montage_rows_value.value()
+
+    def update_montage_columns(self):
+        self.params.montage_columns = self.montage_columns_value.value()
+
+    def update_montage_spacing(self):
+        self.params.montage_spacing = self.montage_spacing_value.value()
+
+
 
 
 
